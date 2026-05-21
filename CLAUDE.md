@@ -1,25 +1,33 @@
 # Claude Code Configuration — WiFi-DensePose + Claude Flow V3
 
-## Project: wifi-densepose
+## Project: RuView (wifi-densepose)
 
 WiFi-based human pose estimation using Channel State Information (CSI).
-Dual codebase: Python v1 (`v1/`) and Rust port (`v2/`).
-### Key Rust Crates
+Dual codebase: legacy Python v1 (`archive/v1/`) and active Rust workspace (`v2/`).
+Repo root contains `Makefile`, `install.sh`, `verify`, `deploy.sh` — these are the top-level entry points and almost always preferable to invoking the underlying tool directly.
+
+### Key Rust Crates (22 workspace members, `v2/Cargo.toml`)
 | Crate | Description |
 |-------|-------------|
 | `wifi-densepose-core` | Core types, traits, error types, CSI frame primitives |
-| `wifi-densepose-signal` | SOTA signal processing + RuvSense multistatic sensing (14 modules) |
+| `wifi-densepose-signal` | SOTA signal processing + RuvSense multistatic sensing (16 modules) |
 | `wifi-densepose-nn` | Neural network inference (ONNX, PyTorch, Candle backends) |
 | `wifi-densepose-train` | Training pipeline with ruvector integration + ruview_metrics |
 | `wifi-densepose-mat` | Mass Casualty Assessment Tool — disaster survivor detection |
 | `wifi-densepose-hardware` | ESP32 aggregator, TDM protocol, channel hopping firmware |
 | `wifi-densepose-ruvector` | RuVector v2.0.4 integration + cross-viewpoint fusion (5 modules) |
 | `wifi-densepose-wasm` | WebAssembly bindings for browser deployment |
+| `wifi-densepose-wasm-edge` | `no_std` WASM edge module (ADR-040) — **excluded** from workspace, build with `--target wasm32-unknown-unknown` |
 | `wifi-densepose-cli` | CLI tool (`wifi-densepose` binary) |
-| `wifi-densepose-sensing-server` | Lightweight Axum server for WiFi sensing UI |
+| `wifi-densepose-sensing-server` | Lightweight Axum server for WiFi sensing UI + REST/WS |
+| `wifi-densepose-desktop` | Native desktop app |
+| `wifi-densepose-pointcloud` | 3D point-cloud fusion (camera depth + CSI + mmWave) |
+| `wifi-densepose-geo` | Geospatial / satellite integration (ADR-044) |
 | `wifi-densepose-wifiscan` | Multi-BSSID WiFi scanning (ADR-022) |
 | `wifi-densepose-vitals` | ESP32 CSI-grade vital sign extraction (ADR-021) |
-| `nvsim` | Deterministic NV-diamond magnetometer pipeline simulator (ADR-089) — standalone leaf, WASM-ready |
+| `cog-pose-estimation` | First Cog packaging (ADR-100/101) — signed pose-estimation binary + JSONL manifest for Cognitum V0 appliance |
+| `nvsim` / `nvsim-server` | Deterministic NV-diamond magnetometer pipeline simulator (ADR-089) — standalone leaf, WASM-ready |
+| `ruv-neural` | Shared neural primitives |
 | `vendor/rvcsi` (submodule) | **rvCSI** — edge RF sensing runtime (ADR-095/096): 9 crates (`rvcsi-core`/`-dsp`/`-events`/`-adapter-file`/`-adapter-nexmon`/`-ruvector`/`-runtime`/`-node`/`-cli`). Lives in its own repo ([github.com/ruvnet/rvcsi](https://github.com/ruvnet/rvcsi)), vendored here under `vendor/rvcsi`, published to crates.io as `rvcsi-* 0.3.x` and to npm as `@ruv/rvcsi`. Not a `v2/` workspace member — depend on the published crates (or the submodule's `crates/rvcsi-*` paths). Normalized `CsiFrame`/`CsiWindow`/`CsiEvent` schema, validate-before-FFI, reusable DSP, typed confidence-scored events, the napi-c Nexmon shim (real nexmon_csi `.pcap` from a Raspberry Pi 5 / 4 / 3B+ — BCM43455c0), the napi-rs SDK, the `rvcsi` CLI, a Claude Code plugin. |
 
 ### RuvSense Modules (`signal/src/ruvsense/`)
@@ -37,7 +45,9 @@ Dual codebase: Python v1 (`v1/`) and Rust port (`v2/`).
 | `intention.rs` | Pre-movement lead signals (200-500ms) |
 | `cross_room.rs` | Environment fingerprinting, transition graph |
 | `gesture.rs` | DTW template matching gesture classifier |
+| `temporal_gesture.rs` | Time-aware gesture sequence recognition |
 | `adversarial.rs` | Physically impossible signal detection, multi-link consistency |
+| `attractor_drift.rs` | Dynamical-system attractor drift detection |
 
 ### Cross-Viewpoint Fusion (`ruvector/src/viewpoint/`)
 | Module | Purpose |
@@ -56,18 +66,20 @@ All 5 ruvector crates integrated in workspace:
 - `ruvector-attention` → `model.rs` (apply_spatial_attention) + `bvp.rs`
 
 ### Architecture Decisions
-43 ADRs in `docs/adr/` (ADR-001 through ADR-043). Key ones:
-- ADR-014: SOTA signal processing (Accepted)
-- ADR-015: MM-Fi + Wi-Pose training datasets (Accepted)
-- ADR-016: RuVector training pipeline integration (Accepted — complete)
-- ADR-017: RuVector signal + MAT integration (Proposed — next target)
-- ADR-024: Contrastive CSI embedding / AETHER (Accepted)
-- ADR-027: Cross-environment domain generalization / MERIDIAN (Accepted)
-- ADR-028: ESP32 capability audit + witness verification (Accepted)
-- ADR-029: RuvSense multistatic sensing mode (Proposed)
-- ADR-030: RuvSense persistent field model (Proposed)
-- ADR-031: RuView sensing-first RF mode (Proposed)
-- ADR-032: Multistatic mesh security hardening (Proposed)
+102+ ADRs in `docs/adr/` (ADR-001 through ADR-102+). Key ones:
+- ADR-014: SOTA signal processing
+- ADR-016: RuVector training pipeline integration (complete)
+- ADR-017: RuVector signal + MAT integration
+- ADR-024: Contrastive CSI embedding / AETHER
+- ADR-027: Cross-environment domain generalization / MERIDIAN
+- ADR-028: ESP32 capability audit + witness verification
+- ADR-029 – ADR-032: RuvSense multistatic sensing, persistent field model, sensing-first RF mode, mesh security
+- ADR-040 / ADR-041: WASM programmable sensing + module collection
+- ADR-044: Geospatial / satellite integration
+- ADR-079: Camera-supervised pose fine-tune (phases P7–P9 still pending — no measured camera-supervised PCK@20 published yet)
+- ADR-095 / ADR-096: rvCSI platform + FFI/crate layout
+- ADR-100 / ADR-101: Cog packaging spec + first Cog (pose-estimation, v0.0.1 shipped)
+- ADR-102: Edge module registry (`/api/v1/edge/registry`, 105-cog catalog)
 
 ### Supported Hardware
 
@@ -81,19 +93,59 @@ All 5 ruvector crates integrated in workspace:
 **Not supported:** ESP32 (original), ESP32-C3 — single-core, can't run CSI DSP pipeline.
 
 ### Build & Test Commands (this repo)
+
+**Top-level entry points (preferred):**
 ```bash
-# Rust — full workspace tests (1,031+ tests, ~2 min)
-cd v2
-cargo test --workspace --no-default-features
+# Trust Kill Switch — one-command deterministic proof replay
+./verify                  # or: make verify
+./verify --verbose        # show feature stats + Doppler spectrum
+./verify --verbose --audit  # also scan codebase for mock/random patterns
 
-# Rust — single crate check (no GPU needed)
-cargo check -p wifi-densepose-train --no-default-features
+# Guided installer (7 profiles)
+./install.sh              # interactive; or: make install
+./install.sh --check-only # hardware/env check, no install
+make install-verify       # ~5 MB — verification only
+make install-rust         # Rust pipeline with ~810x speedup
+make install-full         # everything
 
-# Python — deterministic proof verification (SHA-256)
+# Run targets
+make run-api              # uvicorn on :8000
+make run-viz              # 3D viz HTTP server on :3000
+make run-docker           # docker compose up
+```
+
+**Rust workspace (`v2/`):**
+```bash
+# Full workspace tests (1,463 passed, ~2 min)
+cd v2 && cargo test --workspace --no-default-features
+# or from repo root:
+make test-rust
+
+# Single crate (no GPU needed)
+cd v2 && cargo check -p wifi-densepose-train --no-default-features
+
+# Single test by name
+cd v2 && cargo test -p wifi-densepose-signal test_phase_align -- --nocapture
+
+# Benchmarks (signal processing)
+make bench                # cargo bench -p wifi-densepose-signal
+
+# Release build / WASM
+make build-rust           # cargo build --release
+make build-wasm           # browser target
+make build-wasm-mat       # browser target with WiFi-Mat feature
+```
+
+**Python (`archive/v1/`):**
+```bash
+# Deterministic SHA-256 proof — must print VERDICT: PASS
 python archive/v1/data/proof/verify.py
 
-# Python — test suite
+# Test suite
 cd archive/v1 && python -m pytest tests/ -x -q
+
+# Run a single test
+cd archive/v1 && python -m pytest tests/test_csi_processor.py::test_phase_sanitize -xvs
 ```
 
 ### ESP32 Firmware Build (Windows — Python subprocess required)
@@ -146,7 +198,7 @@ Crates must be published in dependency order:
 **After any significant code change, run the full validation:**
 
 ```bash
-# 1. Rust tests — must be 1,031+ passed, 0 failed
+# 1. Rust tests — must be 1,463 passed, 0 failed
 cd v2
 cargo test --workspace --no-default-features
 
@@ -175,7 +227,7 @@ python archive/v1/data/proof/verify.py
 - `proof/verify.py` + `expected_features.sha256` — Deterministic pipeline proof
 - `test-results/rust-workspace-tests.log` — Full cargo test output
 - `firmware-manifest/source-hashes.txt` — SHA-256 of all 7 ESP32 firmware files
-- `crate-manifest/versions.txt` — All 15 crates with versions
+- `crate-manifest/versions.txt` — All 22 crates with versions
 - `VERIFY.sh` — One-command self-verification for recipients
 
 **Key proof artifacts:**
@@ -186,8 +238,7 @@ python archive/v1/data/proof/verify.py
 - `docs/adr/ADR-028-esp32-capability-audit.md` — Complete audit record
 
 ### Branch
-Default branch: `main`
-Active feature branch: `ruvsense-full-implementation` (PR #77)
+Default branch: `main` — also the working branch. Feature work generally happens on short-lived branches merged via PR (recent PRs are in the #640–#679 range).
 
 ---
 
@@ -205,15 +256,19 @@ Active feature branch: `ruvsense-full-implementation` (PR #77)
 ## File Organization
 
 - NEVER save to root folder — use the directories below
-- `docs/adr/` — Architecture Decision Records (43 ADRs)
+- `docs/adr/` — Architecture Decision Records (102+ ADRs)
 - `docs/ddd/` — Domain-Driven Design models
-- `v2/crates/` — Rust workspace crates (15 crates)
-- `v2/crates/wifi-densepose-signal/src/ruvsense/` — RuvSense multistatic modules (14 files)
+- `v2/crates/` — Rust workspace crates (22 members)
+- `v2/crates/wifi-densepose-signal/src/ruvsense/` — RuvSense multistatic modules (16 files)
 - `v2/crates/wifi-densepose-ruvector/src/viewpoint/` — Cross-viewpoint fusion (5 files)
 - `v2/crates/wifi-densepose-hardware/src/esp32/` — ESP32 TDM protocol
-- `firmware/esp32-csi-node/main/` — ESP32 C firmware (channel hopping, NVS config, TDM)
+- `firmware/esp32-csi-node/` — ESP32-S3 C firmware (channel hopping, NVS config, TDM, OTA)
+- `firmware/esp32-hello-world/` — minimal ESP32 sanity firmware
 - `archive/v1/src/` — Python source (core, hardware, services, api)
 - `archive/v1/data/proof/` — Deterministic CSI proof bundles
+- `scripts/` — Node + Python tooling (rf-scan, snn-csi-processor, mincut-person-counter, witness bundle generator, training data collectors, etc.)
+- `vendor/` — git submodules: `rvcsi`, `ruvector`, `midstream`, `sublinear-time-solver` (each with its own workspace)
+- `ui/` and `dashboard/` — browser viz (served by `make run-viz`)
 - `.claude-flow/` — Claude Flow coordination state (committed for team sharing)
 - `.claude/` — Claude Code settings, agents, memory (committed for team sharing)
 
@@ -238,7 +293,7 @@ Active feature branch: `ruvsense-full-implementation` (PR #77)
 
 Before merging any PR, verify each item applies and is addressed:
 
-1. **Rust tests pass** — `cargo test --workspace --no-default-features` (1,031+ passed, 0 failed)
+1. **Rust tests pass** — `cargo test --workspace --no-default-features` (1,463 passed, 0 failed)
 2. **Python proof passes** — `python archive/v1/data/proof/verify.py` (VERDICT: PASS)
 3. **README.md** — Update platform tables, crate descriptions, hardware tables, feature summaries if scope changed
 4. **CLAUDE.md** — Update crate table, ADR list, module tables, version if scope changed
@@ -253,19 +308,10 @@ Before merging any PR, verify each item applies and is addressed:
 
 ## Build & Test
 
-```bash
-# Build
-npm run build
+This project has **no top-level `package.json`** — there is no `npm run build/test/lint`. Use the commands in the "Build & Test Commands (this repo)" section above (`make`, `cargo`, `pytest`, `./verify`).
 
-# Test
-npm test
-
-# Lint
-npm run lint
-```
-
-- ALWAYS run tests after making code changes
-- ALWAYS verify build succeeds before committing
+- ALWAYS run `make test-rust` (or the relevant `cargo test -p <crate>`) after Rust changes
+- ALWAYS run `./verify` after touching the signal pipeline — it is the Trust Kill Switch and must print `VERDICT: PASS`
 
 ## Security Rules
 
@@ -293,11 +339,11 @@ npm run lint
 
 ### 3-Tier Model Routing (ADR-026)
 
-| Tier | Handler | Latency | Cost | Use Cases |
-|------|---------|---------|------|-----------|
-| **1** | Agent Booster (WASM) | <1ms | $0 | Simple transforms (var→const, add types) — Skip LLM |
-| **2** | Haiku | ~500ms | $0.0002 | Simple tasks, low complexity (<30%) |
-| **3** | Sonnet/Opus | 2-5s | $0.003-0.015 | Complex reasoning, architecture, security (>30%) |
+| Tier  | Handler              | Latency | Cost          | Use Cases                                            |
+| ----- | -------------------- | ------- | ------------- | ---------------------------------------------------- |
+| **1** | Agent Booster (WASM) | <1ms    | $0            | Simple transforms (var→const, add types) — Skip LLM  |
+| **2** | Haiku                | ~500ms  | $0.0002       | Simple tasks, low complexity (<30%)                  |
+| **3** | Sonnet/Opus          | 2-5s    | $0.003-0.015  | Complex reasoning, architecture, security (>30%)     |
 
 - Always check for `[AGENT_BOOSTER_AVAILABLE]` or `[TASK_MODEL_RECOMMENDATION]` before spawning agents
 - Use Edit tool directly when `[AGENT_BOOSTER_AVAILABLE]`
@@ -327,16 +373,16 @@ npx @claude-flow/cli@latest swarm init --topology hierarchical --max-agents 8 --
 
 ### Core Commands
 
-| Command | Subcommands | Description |
-|---------|-------------|-------------|
-| `init` | 4 | Project initialization |
-| `agent` | 8 | Agent lifecycle management |
-| `swarm` | 6 | Multi-agent swarm coordination |
-| `memory` | 11 | AgentDB memory with HNSW search |
-| `task` | 6 | Task creation and lifecycle |
-| `session` | 7 | Session state management |
-| `hooks` | 17 | Self-learning hooks + 12 workers |
-| `hive-mind` | 6 | Byzantine fault-tolerant consensus |
+| Command     | Subcommands | Description                          |
+| ----------- | ----------- | ------------------------------------ |
+| `init`      | 4           | Project initialization               |
+| `agent`     | 8           | Agent lifecycle management           |
+| `swarm`     | 6           | Multi-agent swarm coordination       |
+| `memory`    | 11          | AgentDB memory with HNSW search      |
+| `task`      | 6           | Task creation and lifecycle          |
+| `session`   | 7           | Session state management             |
+| `hooks`     | 17          | Self-learning hooks + 12 workers     |
+| `hive-mind` | 6           | Byzantine fault-tolerant consensus   |
 
 ### Quick CLI Examples
 
@@ -351,18 +397,23 @@ npx @claude-flow/cli@latest doctor --fix
 ## Available Agents (60+ Types)
 
 ### Core Development
+
 `coder`, `reviewer`, `tester`, `planner`, `researcher`
 
 ### Specialized
+
 `security-architect`, `security-auditor`, `memory-specialist`, `performance-engineer`
 
 ### Swarm Coordination
+
 `hierarchical-coordinator`, `mesh-coordinator`, `adaptive-coordinator`
 
 ### GitHub & Repository
+
 `pr-manager`, `code-review-swarm`, `issue-tracker`, `release-manager`
 
 ### SPARC Methodology
+
 `sparc-coord`, `sparc-coder`, `specification`, `pseudocode`, `architecture`
 
 ## Memory Commands Reference
@@ -397,5 +448,5 @@ npx @claude-flow/cli@latest doctor --fix
 
 ## Support
 
-- Documentation: https://github.com/ruvnet/claude-flow
-- Issues: https://github.com/ruvnet/claude-flow/issues
+- Documentation: <https://github.com/ruvnet/claude-flow>
+- Issues: <https://github.com/ruvnet/claude-flow/issues>
